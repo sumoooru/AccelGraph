@@ -19,14 +19,17 @@ public class MainActivity extends Activity implements SensorEventListener {
     private GraphView xView, yView, zView;
 
     private SensorManager sensorMgr;
-    private Sensor accelerometer;
+    private Sensor accelerometer, mysens;
 
-    private final static long GRAPH_REFRESH_WAIT_MS = 20;
+    private final static long GRAPH_REFRESH_WAIT_MS = 30;
+    private final static float wmAlpha = 0.9f;
 
     private GraphRefreshThread th = null;
     private Handler handler;
 
-    private float vx, vy, vz;
+    private float vx, vy, vz,
+    vxw, vyw, vzw,
+    vl;
     private float rate;
     private int accuracy;
     private long prevts;
@@ -45,8 +48,15 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         sensorMgr = (SensorManager) getSystemService(SENSOR_SERVICE);
         accelerometer = sensorMgr.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        mysens = sensorMgr.getDefaultSensor(Sensor.TYPE_LIGHT);
         if (accelerometer == null) {
             Toast.makeText(this, getString(R.string.toast_no_accel_error),
+                    Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+        if (mysens == null) {
+            Toast.makeText(this, "no light sensor",
                     Toast.LENGTH_SHORT).show();
             finish();
             return;
@@ -60,6 +70,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         super.onResume();
         Log.i(TAG, "onResume");
         sensorMgr.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_FASTEST);
+        sensorMgr.registerListener(this, mysens, SensorManager.SENSOR_DELAY_NORMAL);
         th = new GraphRefreshThread();
         th.start();
     }
@@ -74,9 +85,18 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
+        if(event.sensor == mysens){
+            vl = event.values[0];
+            Log.i(TAG, "val " + vl);
+            return;
+        }
         vx = event.values[0];
         vy = event.values[1];
         vz = event.values[2];
+        vxw = wmAlpha * vxw + (1-wmAlpha) * event.values[0];
+        vyw = wmAlpha * vyw + (1-wmAlpha) * event.values[1];
+        vzw = wmAlpha * vzw + (1-wmAlpha) * event.values[2];
+
         rate = ((float) (event.timestamp - prevts)) / (1000 * 1000);
         prevts = event.timestamp;
     }
@@ -95,6 +115,10 @@ public class MainActivity extends Activity implements SensorEventListener {
                         public void run() {
                             rateView.setText(Float.toString(rate));
                             accuracyView.setText(Integer.toString(accuracy));
+                            xView.addDataWM(vxw, true);
+                            yView.addDataWM(vyw, true);
+                            zView.addDataWM(vzw, true);
+                            xView.addDataL(vl, true);
                             xView.addData(vx, true);
                             yView.addData(vy, true);
                             zView.addData(vz, true);
